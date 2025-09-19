@@ -5,6 +5,19 @@
  */
 
 exports.up = async function up(knex) {
+
+
+
+  // USERS
+  await knex.schema.createTable("users", (t) => {
+    t.bigIncrements("id").primary();
+    t.string("name", 255).notNullable();
+    t.string("email", 255).notNullable().unique();
+    t.string("password", 255).notNullable();
+    t.string("role", 255).notNullable().defaultTo("user");
+    t.timestamps(true, true);
+  });
+
   // PRODUCTS
   await knex.schema.createTable("products", (t) => {
     t.bigIncrements("id").primary();
@@ -18,6 +31,13 @@ exports.up = async function up(knex) {
   // SALES (bill header)
   await knex.schema.createTable("sales", (t) => {
     t.bigIncrements("id").primary();
+    t.bigInteger("user_id")
+      .unsigned()
+      .notNullable()
+      .references("id")
+      .inTable("users")
+      .onUpdate("CASCADE")
+      .onDelete("CASCADE");
     t.string("invoice_no", 64).nullable().unique();
     t.decimal("total_amount", 12, 2).notNullable().defaultTo(0.0);
     t.timestamp("created_at").notNullable().defaultTo(knex.fn.now());
@@ -26,6 +46,13 @@ exports.up = async function up(knex) {
   // SALE ITEMS (bill lines)
   await knex.schema.createTable("sale_items", (t) => {
     t.bigIncrements("id").primary();
+    t.bigInteger("user_id")
+      .unsigned()
+      .notNullable()
+      .references("id")
+      .inTable("users")
+      .onUpdate("CASCADE")
+      .onDelete("CASCADE");
     t.bigInteger("sale_id")
       .unsigned()
       .notNullable()
@@ -48,4 +75,5 @@ exports.down = async function down(knex) {
   await knex.schema.dropTableIfExists("sale_items");
   await knex.schema.dropTableIfExists("sales");
   await knex.schema.dropTableIfExists("products");
+  await knex.schema.dropTableIfExists("users");
 };

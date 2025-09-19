@@ -1,99 +1,73 @@
-// exports.seed = async function (knex) {
-//   // Deletes ALL existing entries (in correct order)
-//   await knex("sale_items").del();
-//   await knex("sales").del();
-//   await knex("products").del();
-
-//   // Insert products
-//   const [p1_id, p2_id, p3_id] = await knex("products").insert([
-//     { name: "Coca Cola 500ml", sku: "SKU001", price: 1.50, stock_qty: 100 },
-//     { name: "Lays Chips 100g", sku: "SKU002", price: 2.00, stock_qty: 50 },
-//     { name: "Dairy Milk Chocolate", sku: "SKU003", price: 1.20, stock_qty: 80 },
-//   ]);
-
-//   // Insert a sample sale (bill header)
-//   const [sale_id] = await knex("sales").insert({
-//     invoice_no: `INV-${Date.now()}`,
-//     total_amount: 5.50,
-//   });
-
-//   // Insert sale items (lines)
-//   await knex("sale_items").insert([
-//     {
-//       sale_id: sale_id,
-//       product_id: p1_id,
-//       quantity: 2,
-//       price: 1.50,
-//       line_total: 3.00,
-//     },
-//     {
-//       sale_id: sale_id,
-//       product_id: p2_id,
-//       quantity: 1,
-//       price: 2.50,
-//       line_total: 2.50,
-//     },
-//     {
-//       sale_id: sale_id,
-//       product_id: p3_id,
-//       quantity: 1,
-//       price: 1.20,
-//       line_total: 1.20,
-//     },
-//   ]);
-// };
+const bcrypt = require("bcryptjs");
 
 exports.seed = async function (knex) {
-  // Deletes ALL existing entries (in correct order due to foreign keys)
+  // Clear tables in correct order
   await knex("sale_items").del();
   await knex("sales").del();
   await knex("products").del();
+  await knex("users").del();
 
-  // Insert products (capture inserted IDs manually)
-  const productIds = await knex("products").insert([
-    { name: "Coca Cola 500ml", sku: "SKU001", price: 1.50, stock_qty: 100 },
-    { name: "Lays Chips 100g", sku: "SKU002", price: 2.00, stock_qty: 50 },
-    { name: "Dairy Milk Chocolate", sku: "SKU003", price: 1.20, stock_qty: 80 },
-  ]);
+  // Insert a user (admin)
+  const [userInsertId] = await knex("users").insert(
+    {
+      name: "John Doe",
+      email: "admin@example.com",
+      password: bcrypt.hashSync("admin@123", 10),
+      role: "admin",
+    }
+  );
 
-  // productIds will be [firstInsertedId] only in MySQL
-  const firstProductId = productIds[0];
+  const userId = userInsertId; // MySQL returns numeric insertId
 
-  // Since MySQL doesn’t return multiple IDs, we calculate them manually
+  // Insert products
+  const firstProductId = await knex("products")
+    .insert([
+      { name: "Coca Cola 500ml", sku: "SKU001", price: 1.5, stock_qty: 100 },
+      { name: "Lays Chips 100g", sku: "SKU002", price: 2.0, stock_qty: 50 },
+      { name: "Dairy Milk Chocolate", sku: "SKU003", price: 1.2, stock_qty: 80 },
+    ])
+    .then((ids) => ids[0]);
+
   const p1_id = firstProductId;
   const p2_id = firstProductId + 1;
   const p3_id = firstProductId + 2;
 
-  // Insert a sample sale (bill header)
-  const saleInsert = await knex("sales").insert({
-    invoice_no: `INV-${Date.now()}`,
-    total_amount: 5.70,
-  });
+  // Insert sale (bill header)
+  const [saleInsertId] = await knex("sales").insert(
+    {
+      invoice_no: `INV-00001`,
+      total_amount: 6.20,
+      user_id: userId,
+    }
+  );
 
-  const sale_id = saleInsert[0]; // MySQL returns [insertId]
+  const saleId = saleInsertId;
 
-  // Insert sale items (lines)
+  // Insert sale items (all must include user_id!)
   await knex("sale_items").insert([
     {
-      sale_id: sale_id,
+      sale_id: saleId,
       product_id: p1_id,
       quantity: 2,
-      price: 1.50,
-      line_total: 3.00,
+      price: 1.5,
+      line_total: 3.0,
+      user_id: userId,
     },
     {
-      sale_id: sale_id,
+      sale_id: saleId,
       product_id: p2_id,
       quantity: 1,
-      price: 2.00,
-      line_total: 2.00,
+      price: 2.0,
+      line_total: 2.0,
+      user_id: userId,
     },
     {
-      sale_id: sale_id,
+      sale_id: saleId,
       product_id: p3_id,
       quantity: 1,
-      price: 1.20,
-      line_total: 1.20,
+      price: 1.2,
+      line_total: 1.2,
+      user_id: userId,
     },
   ]);
 };

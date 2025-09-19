@@ -2,7 +2,16 @@ const db = require('../../config/dbConfig');
 
 const list = async (req, res) => {
   try {
-    const products = await db("products").select("*").orderBy("id", "desc");
+    let { search } = req.query;
+
+  
+    let query = db("products").select("*").orderBy("id", "desc");
+
+    if (search) {
+      query = query.where("products.name", "like", `%${search}%`);
+    }
+
+    const products = await query;
 
     return res.status(200).json({
       data: products,
@@ -13,6 +22,7 @@ const list = async (req, res) => {
     return res.status(500).json({ error: "Failed to fetch products" });
   }
 };
+
 
 const getProduct = async (req, res) => {
   try {
@@ -82,19 +92,24 @@ const deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
 
+    const used = await db("sale_items").where({ product_id: id }).first();
+    if (used) {
+      return res.status(400).json({
+        error: "Cannot delete product because it has sales history",
+      });
+    }
+
     const affected = await db("products").where({ id }).del();
 
     if (!affected) return res.status(404).json({ error: "Product not found" });
 
-    return res.status(200).json({
-      data: null,
-      message: "Product deleted successfully",
-    });
+    return res.status(200).json({ message: "Product deleted successfully" });
   } catch (err) {
     console.error("deleteProduct error:", err);
     return res.status(500).json({ error: "Failed to delete product" });
   }
 };
+
 
 module.exports = {
   list,

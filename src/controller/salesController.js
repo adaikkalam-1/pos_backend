@@ -3,6 +3,8 @@ const db = require("../../config/dbConfig");
 // Create a sale with items and decrement stock atomically
 const createSale = async (req, res) => {
   const { items = [] } = req.body || {};
+  const { id: user_id } = req.user;
+  console.log(user_id);
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "items array is required" });
   }
@@ -12,9 +14,9 @@ const createSale = async (req, res) => {
       const prepared = [];
 
       for (const item of items) {
-        const { product_id, quantity, price } = item || {};
-        if (!product_id || !quantity || !price) {
-          throw new Error("Each item requires product_id, quantity, price");
+        const { product_id, quantity } = item || {};
+        if (!product_id || !quantity ) {
+          throw new Error("Each item requires product_id, quantity");
         }
 
         // Lock product row for update
@@ -28,7 +30,7 @@ const createSale = async (req, res) => {
         }
         if (product.stock_qty < quantity) {
           throw new Error(
-            `Insufficient stock for product ${product_id}. Available: ${product.stock_qty}, requested: ${quantity}`
+            `Insufficient stock for product ${product.name}.`
           );
         }
 
@@ -37,8 +39,8 @@ const createSale = async (req, res) => {
           .where({ id: product_id })
           .update({ stock_qty: product.stock_qty - quantity });
 
-        const line_total = Number(price) * Number(quantity);
-        prepared.push({ product_id, quantity, price, line_total });
+        const line_total = Number(product.price) * Number(quantity);
+        prepared.push({ product_id, quantity, price: product.price, line_total });
       }
 
       const total_amount = prepared.reduce(
@@ -53,10 +55,12 @@ const createSale = async (req, res) => {
         invoice_no,
         total_amount,
         created_at: trx.fn.now(),
+        user_id,
       });
 
       const rows = prepared.map((it) => ({
         sale_id,
+        user_id,
         product_id: it.product_id,
         quantity: it.quantity,
         price: it.price,
@@ -65,7 +69,11 @@ const createSale = async (req, res) => {
       await trx("sale_items").insert(rows);
 
       const header = await trx("sales").where({ id: sale_id }).first();
-      const lineItems = await trx("sale_items").where({ sale_id }).select("*");
+            const lineItems = await trx("sale_items as si")
+        .join("products as p", "si.product_id", "p.id")
+        .where("si.sale_id", sale_id)
+        .select("si.*","p.name as product_name");
+    
 
       return { sale: header, items: lineItems };
     });
@@ -84,13 +92,15 @@ const createSale = async (req, res) => {
 
 const listSales = async (req, res) => {
   try {
+    let { search } = req.query;
     // Get sales first
     const sales = await db("sales")
-      .select("id", "invoice_no", "total_amount", "created_at")
-      .orderBy("id", "desc");
+      .join("users", "sales.user_id", "users.id")
+      .select("sales.id", "sales.invoice_no", "sales.total_amount", "sales.created_at", "users.name as user_name", "users.email as user_email")
+      .orderBy("sales.id", "desc");
 
     // Get sale items with product details
-    const saleItems = await db("sale_items")
+    let query = db("sale_items")
       .join("products", "sale_items.product_id", "products.id")
       .select(
         "sale_items.sale_id",
@@ -102,6 +112,10 @@ const listSales = async (req, res) => {
         "products.sku"
       );
 
+    if (search) {
+      query.where("products.name", "like", `%${search}%`);
+    }
+    const saleItems = await query;
     // Group items by sale_id
     const salesWithItems = sales.map((sale) => {
       const items = saleItems.filter((i) => i.sale_id === sale.id);
